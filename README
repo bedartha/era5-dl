@@ -1,0 +1,53 @@
+Downloads daily data from CDS for S2S analysis (as per FuXi S2S)
+================================================================
+
+The total number of layers are 76, of which 11 layers are for single-layer
+variables, and the remaining 65 layers are from 13 pressure levels with 5
+variables at each layer. The resolution of the data is 0.25 degrees but will
+be regridded to 1.5 degrees for the S2S training. The detailed list of the
+variables are given below.
+
+Single Level Variables
+----------------------
+- 10m_u_component_of_wind
+- 10m_v_component_of_wind
+- 2m_dewpoint_temperature
+- 2m_temperature
+- mean_sea_level_pressure
+- sea_surface_temperature
+- total_precipitation
+- 100m_u_component_of_wind
+- 100m_v_component_of_wind
+- top_net_thermal_radiation
+- land_sea_mask
+- total_column_water_vapour
+
+Pressure Level Variables
+------------------------
+- temperature
+- geopotential
+- specific_humidity
+- u_component_of_wind
+- v_component_of_wind
+
+Pressure Levels
+---------------
+- 50
+- 100
+- 150
+- 200
+- 250
+- 300
+- 400
+- 500
+- 600
+- 700
+- 850
+- 925
+- 1000
+
+References
+----------
+[1] Chen, Lei, et al. "A machine learning model that outperforms conventional
+    global subseasonal forecast models." Nature Communications 15.1 (2024): 6425.
+
