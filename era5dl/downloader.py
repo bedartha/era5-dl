@@ -9,14 +9,13 @@ from tqdm import tqdm
 import logging
 from ecmwf.datastores import Client
 
+import params
 
 logging.basicConfig(level="INFO")
 client = Client()
 client.check_authentication()
 
 CHK_MAX_JOBS = 100
-MONTHS = [str(m) for m in range(1, 13)]
-DAYS = [str(d) for d in range(1, 32)]
 
 
 
@@ -42,14 +41,16 @@ def _print_info(remote, rid, args):
 
 def _select_job(client, task):
     """prints list of successful jobs to stdout"""
-    jobs = client.get_jobs(sortby="-created", status="successful")
+    jobs = client.get_jobs(limit=CHK_MAX_JOBS,
+                           sortby="-created",
+                           status="successful")
     request_ids = jobs.request_ids
     year, var = [], []
     for rid in request_ids:
         remote = client.get_remote(rid)
         var.extend(remote.request['variable'])
         year.extend(remote.request['year'])
-    _pprint("\nThe following jobs are marked as succssful:")
+    _pprint("\nThe following jobs are marked as successful:")
     for i, zipped  in enumerate(zip(request_ids, var, year)):
         rid, y, v = zipped
         _pprint(f"\t[{i}] RID: {rid}\tYEAR: {y}\tVAR: {v}")
@@ -137,22 +138,12 @@ def retrieve(args):
 
 def structure_request(args):
     """downloads data for single levels"""
-    if args.data_type == "single-level":
-        collection_id = "derived-era5-single-levels-daily-statistics"
-        request = {
-            "product_type": "reanalysis",
-            "variable": args.var,
-            "year": args.year,
-            "month": MONTHS,
-            "day": DAYS,
-            "daily_statistic": "daily_mean",
-            "time_zone": "utc+00:00",
-            "frequency": "6_hourly",
-            "data_format": "netcdf",
-        }
-    elif args.data_type == "pressure-level":
-        plevel = args.plevel
-        collection_id, request = pressure_level(variable, plevel, args.year)
+    # retrieve the general request params that remain broadly unchanged
+    collection_id = params.COLLECTION_ID
+    request = params.REQUEST_ARGS
+    # add the variable name and year as specified by user
+    request["variable"] = args.var
+    request["year"] = args.year
     return collection_id, request
 
 

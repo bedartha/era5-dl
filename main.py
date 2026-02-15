@@ -25,10 +25,10 @@ def _parser():
                     description=helpdoc,
                     formatter_class=argparse.RawTextHelpFormatter,
                     epilog=f"(c) {epilog}")
-    parser.add_argument("-dt", "--data-type",
-                        help="Type of data to download",
-                        choices=["single-level", "pressure-level"],
-                        )
+    # parser.add_argument("-dt", "--data-type",
+    #                     help="Type of data to download",
+    #                     choices=["single-level", "pressure-level"],
+    #                     )
     parser.add_argument("-v", "--var",
                         help="Variable name (See --help for options)",
                         )
