@@ -44,11 +44,15 @@ def _parser():
     parser.add_argument("-t", "--task",
                         help="Specify the task to execute",
                         choices=["submit", "check", "download",
-                            "retrieve", "delete"]
+                            "retrieve", "delete", "build_db"]
                         )
     parser.add_argument("-st", "--status",
                         help="Status of job (to be used with ``-t check``",
                         choices=["accepted", "running", "successful", "failed"]
+                        )
+    parser.add_argument("-n", "--num-jobs",
+                        default=100,
+                        help="Number of jobs to query from the data store"
                         )
     parser.add_argument("-q", "--quiet",
                         action="store_false",
