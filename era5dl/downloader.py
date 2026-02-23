@@ -20,7 +20,6 @@ client.check_authentication()
 
 
 
-
 def _pprint(stuff, verbose=True):
     """prints given stuff depending on the verbosity boolean"""
     if verbose:
@@ -28,38 +27,80 @@ def _pprint(stuff, verbose=True):
     return None
 
 
-def _print_info(remote, rid, args):
-    """Prints job information in human readable form for given remote"""
-    request = remote.request
-    result_status = (not remote.results_ready) * "NOT " + "READY"
-    _pprint(f"\nGetting info for request with ID {rid}")
-    _pprint(f"Submitted at: {remote.created_at}")
-    _pprint(f"For data from : {remote.collection_id}")
-    _pprint(f"Particulars of the data requested")
-    _pprint(f"{request['variable'][0]}, {request['year'][0]}, {remote.status}")
-    _pprint(f"Job with ID {rid} is {result_status} for download")
+def run_del_or_dl(args):
+    """Runs the delete or download tasks"""
+    _set_logging(args.quiet)
+    jobs_list, hdr = _job_ls(args, jobtype="successful")
+    jobs = _job_sel(jobs_list, hdr, args)
+    _job_loop(jobs, args)
     return None
 
 
-def _select_job(client, task, args):
-    """prints list of successful jobs to stdout"""
-    jobs = client.get_jobs(limit=args.num_jobs,
-                           sortby="-created",
-                           status="successful")
-    request_ids = jobs.request_ids
-    year, var = [], []
-    for rid in request_ids:
-        remote = client.get_remote(rid)
-        var.extend(remote.request['variable'])
-        year.extend(remote.request['year'])
+def _job_ls(args, jobtype="successful"):
+    """returns the job list from the current database"""
+    # check if file exists in database
+    f = f"./db/{jobtype}.csv"
+    assert os.path.isfile(f),\
+            f"there are no {jobtype} jobs. Try running `-t build_db`"
+
+    # check if file has been modified recently, else rebuild database
+    timediff = time.time() - os.path.getmtime(f)
+    assert timediff < 14400, "Outdated database! Rebuild with ``-t build_db``"
+
+    # get jobs list from database file
+    jobs_list = []
+    with open(f, mode ='r') as file:
+        csvFile = csv.reader(file)
+        for lines in csvFile:
+            jobs_list.append(lines)
+
+    # separate header and job details, retain only njobs, reverse order
+    hdr = jobs_list[0]
+    jobs_list = jobs_list[1:]
+    jobs_list = jobs_list[-int(args.num_jobs):][::-1]
+
+    return jobs_list, hdr
+
+
+def _job_sel(jobs_list, hdr, args):
+    """asks for user input to select the job from given job list"""
     _pprint("\nThe following jobs are marked as successful:")
-    for i, zipped  in enumerate(zip(request_ids, var, year)):
-        rid, y, v = zipped
-        _pprint(f"\t[{i}] RID: {rid}\tYEAR: {y}\tVAR: {v}")
-    _pprint(f"Which job would you like to {task}? (Enter the number)\n")
-    i = int(input())
-    assert i < len(request_ids), "Invalid choice!"
-    return request_ids[i], year[i], var[i]
+    _pprint(f"No.\t{hdr[4]}\t\t{hdr[5]}\t\t\t{hdr[0]}")
+    for i, job in enumerate(jobs_list):
+        print(f"[{i+1}]\t{job[4]}\t{job[5]}\t{job[0]}")
+    _pprint(f"Which job(s) would you like to {args.task}?")
+    _pprint("Enter the number(s) separated by commas")
+    ids = input().split(",")
+    selected = [jobs_list[int(i)-1] for i in ids]
+    return selected
+
+
+def _job_loop(jobs, args):
+    """Executes specified args.task (delete or download) on the jobs"""
+    execute = {
+            "delete": __delete,
+            "download": __download
+            }
+    for job in jobs:
+        rid = job[0]
+        year = job[4]
+        var = job[5]
+        _pprint(f"{args.task} ...")
+        _pprint(f"RID: {rid}\tYEAR: {year}\tVAR: {var}")
+        execute[args.task](rid, args)
+    return None
+
+
+def __delete(rid, args):
+    client.delete(rid)
+    _pprint("done.", args.quiet)
+    return None
+
+
+def __download(rid, args):
+    client.get_remote(rid).download(f"{args.path_to_output}/{var}_{year}.nc")
+    _pprint(f"\tSaved to: {target}", args.quiet)
+    return None
 
 
 def _set_logging(quiet):
@@ -99,22 +140,6 @@ def build_db(args):
                     "variable": remote.request["variable"][0],
                     }
             jobs_list.append(job_dict)
-        # # read inthe jobs list currently stored in the database
-        # f_db = f"./db/{status}.csv"
-        # jobs_list_db = []
-        # with open(f_db, mode ='r')as file:
-        #     csvFile = csv.reader(file)
-        #     for lines in csvFile:
-        #         jobs_list_db.append(lines)
-        # jobs_list_db = jobs_list_db[1:]             # skip header row
-        # rid_db = [job[0] for job in jobs_list_db]
-        # # remove jobs that exist in the database
-        # print(len(jobs_list))
-        # for job in jobs_list:
-        #     if job["request_id"] in rid_db:
-        #         jobs_list.remove(job)
-        # print(len(jobs_list))
-        # os.sys.exit()
 
         # save dictionary as a csv file to disk
         headers = [k for k in job_dict.keys()]
@@ -138,77 +163,22 @@ def check(args):
     """checks status of submitted jobs"""
     logging.getLogger().setLevel(logging.ERROR)
     assert args.status is not None, "Please specify the status of job(s)"
-    if args.status == "all":
-        status_all = ["accepted", "running", "successful", "failed"]
-        request_ids = {}
-        njobs = 0
-        for status in status_all:
-            jobs = client.get_jobs(limit=args.num_jobs,
-                                   sortby="-created",
-                                   status=status)
-            request_ids[status] = jobs.request_ids
-            njobs += len(request_ids[status])
-    else:
-        jobs = client.get_jobs(limit=args.num_jobs,
-                               sortby="-created",
-                               status=args.status)
-        request_ids = jobs.request_ids
-
-    if args.status == "all":
-        for status in status_all:
-            _pprint(f"Fetching status of {status} jobs ...")
-            for rid in request_ids[status]:
-                remote = client.get_remote(rid)
-                _print_info(remote, rid, args)
-    else:
-        _pprint(f"Fetching status of {args.status} jobs ...")
-        for rid in request_ids:
-            remote = client.get_remote(rid)
-            _print_info(remote, rid, args)
+    jobs_list, hdr = _job_ls(args, jobtype=args.status)
+    _pprint(f"No.\t{hdr[4]}\t\t{hdr[5]}\t\t\t{hdr[0]}")
+    for i, job in enumerate(jobs_list):
+        print(f"[{i+1}]\t{job[4]}\t{job[5]}\t{job[0]}")
     return None
 
 
 def delete(args):
     """delete specified job requests"""
-    _set_logging(args.quiet)
-    rid, year, var = _select_job(client, "delete", args)
-    _pprint(f"\tDeleting ...")
-    _pprint(f"\tRID: {rid}\tYEAR: {year}\tVAR: {var}")
-    client.delete(rid)
-    print("Done.", args.quiet)
+    run_del_or_dl(args)
     return None
 
 
 def download(args):
     """downloads jobs that are ready"""
-    _set_logging(args.quiet)
-    f = "./db/successful.csv"
-    timediff = os.path.getmtime(f) - time.time()
-    assert timediff < 14400, "Outdated database! Rebuild with ``-t build_db``"
-    jobs_list = []
-    with open(f, mode ='r')as file:
-        csvFile = csv.reader(file)
-        for lines in csvFile:
-            jobs_list.append(lines)
-    hdr = jobs_list[0]
-    jobs_list = jobs_list[-int(args.num_jobs):][::-1]
-    _pprint("\nThe following jobs are marked as successful:")
-    _pprint(f"No.\t{hdr[4]}\t\t{hdr[5]}\t\t\t{hdr[0]}")
-    for i, job in enumerate(jobs_list[1:]):
-        print(f"[{i+1}]\t{job[4]}\t{job[5]}\t{job[0]}")
-    _pprint(f"Which job would you like to download? (Enter the number)")
-    i = int(input())
-    job = jobs_list[i]
-    rid = job[0]
-    year = job[4]
-    var = job[5]
-    remote = client.get_remote(rid)
-    _pprint(f"\n\tDownloading ...")
-    _pprint(f"\tRID: {rid}\tYEAR: {year}\tVAR: {var}")
-    OUTPATH = args.path_to_output
-    target = f"{OUTPATH}/{var}_{year}.nc"
-    remote.download(target)
-    _pprint(f"\tSaved to: {target}")
+    run_del_or_dl(args)
     return None
 
 
