@@ -82,23 +82,21 @@ def _job_loop(jobs, args):
             "download": __download
             }
     for job in jobs:
-        rid = job[0]
-        year = job[4]
-        var = job[5]
         _pprint(f"{args.task} ...")
-        _pprint(f"RID: {rid}\tYEAR: {year}\tVAR: {var}")
-        execute[args.task](rid, args)
+        _pprint(f"RID: {job[0]}\tYEAR: {job[4]}\tVAR: {job[5]}")
+        execute[args.task](job, args)
     return None
 
 
-def __delete(rid, args):
-    client.delete(rid)
+def __delete(job, args):
+    client.delete(job[0])
     _pprint("done.", args.quiet)
     return None
 
 
-def __download(rid, args):
-    client.get_remote(rid).download(f"{args.path_to_output}/{var}_{year}.nc")
+def __download(job, args):
+    target = f"{args.path_to_output}/{job[5]}_{job[4]}.nc"
+    client.get_remote(job[0]).download(target)
     _pprint(f"\tSaved to: {target}", args.quiet)
     return None
 
